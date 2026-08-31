@@ -35,6 +35,13 @@ fi
 echo "[setup] upgrading pip ..."
 python -m pip install --upgrade pip wheel setuptools
 
+# CPU-only PyTorch wheel first (smaller / faster than the default CUDA wheel;
+# Codespaces has no GPU). Remove this line to let requirements.txt pick the
+# default wheel, e.g. if you attach a GPU.
+echo "[setup] installing CPU PyTorch ..."
+python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.1" \
+    || python -m pip install "torch>=2.1"
+
 echo "[setup] installing Python requirements ..."
 python -m pip install -r requirements.txt
 
