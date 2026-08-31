@@ -183,7 +183,18 @@ def download_puducherry_graph(cfg, logger=None):
         except Exception:
             pass
 
-    ox.save_graphml(G, out)
+    # GraphML for external tools / figures (best effort only)
+    try:
+        ox.save_graphml(G, out)
+    except Exception as exc:
+        if logger:
+            logger.warning(f"  save_graphml failed ({str(exc)[:80]}); "
+                           f"pickle copy is authoritative")
+    # pickle is the copy that load_graph() prefers -- always round-trips
+    import pickle as _pk
+    with open(out.with_suffix(".pkl"), "wb") as fh:
+        _pk.dump(G, fh)
+
     _PROV.update(retrieved_utc=datetime.now(timezone.utc).isoformat(),
                  method=method, synthetic=synthetic,
                  n_nodes=G.number_of_nodes(), n_edges=G.number_of_edges())
@@ -195,11 +206,15 @@ def download_puducherry_graph(cfg, logger=None):
 
 
 def load_graph(cfg):
-    ox = _osmnx()
     path = Path(cfg["_meta"]["repo_root"]) / cfg["osm"]["graphml"]
+    pkl = path.with_suffix(".pkl")
+    if pkl.exists():
+        import pickle as _pk
+        with open(pkl, "rb") as fh:
+            return _pk.load(fh)
     if not path.exists():
         raise FileNotFoundError(f"{path} not found - run scripts/download_osm.py")
-    return ox.load_graphml(path)
+    return _osmnx().load_graphml(path)
 
 
 def graph_is_synthetic(cfg) -> bool:

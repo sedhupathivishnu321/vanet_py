@@ -72,7 +72,13 @@ def line_sweep(x, series: dict, title, xlabel, ylabel, path):
 def plot_osm_network(graphml_path, corridor_geojson, path):
     try:
         import osmnx as ox
-        G = ox.load_graphml(graphml_path)
+        pkl = Path(graphml_path).with_suffix(".pkl")
+        if pkl.exists():
+            import pickle
+            with open(pkl, "rb") as fh:
+                G = pickle.load(fh)
+        else:
+            G = ox.load_graphml(graphml_path)
         fig, ax = ox.plot_graph(G, show=False, close=False, node_size=0,
                                 edge_color="#999999", edge_linewidth=0.5,
                                 bgcolor="white")
