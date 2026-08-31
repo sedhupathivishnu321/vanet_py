@@ -16,8 +16,31 @@ project:
 source_dataset:
   name: METR-LA                 # METR-LA | PEMS-BAY
   root: data/source
-  # If a dataset is already present under `root` it is used as-is.
-  # Otherwise download_dataset.py fetches it from the public mirror below.
+  # If a dataset is already present under `root/<NAME>/` it is used as-is;
+  # otherwise download_dataset.py fetches each file below (first URL that works).
+  # All links are public, no-auth GitHub raw endpoints (verified 2026-09-01):
+  #   * time series  : deepkashiwa20/DL-Traff-Graph  (vendored .h5 / .zip)
+  #   * sensor graph : liyaguang/DCRNN               (adj_mx + sensor locations)
+  download:
+    METR-LA:
+      - [metr-la.h5,
+         "https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/main/METRLA/metr-la.h5",
+         "https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/master/METRLA/metr-la.h5"]
+      - [adj_mx.pkl,
+         "https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/adj_mx.pkl"]
+      - [graph_sensor_locations.csv,
+         "https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_locations.csv"]
+      - [graph_sensor_ids.txt,
+         "https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_ids.txt"]
+    PEMS-BAY:
+      - [pems-bay.zip,
+         "https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/main/PEMSBAY/pems-bay.zip",
+         "https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/master/PEMSBAY/pems-bay.zip"]
+      - [adj_mx_bay.pkl,
+         "https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/adj_mx_bay.pkl"]
+      - [graph_sensor_locations_bay.csv,
+         "https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_locations_bay.csv"]
+  # last-resort mirrors (single zip per dataset); tried only if `download` fails
   mirrors:
     METR-LA:
       - https://graphmining.ai/temporal_datasets/METR-LA.zip

@@ -65,13 +65,45 @@ written into the final report from the actual numbers.
 - **Alternative:** PEMS-BAY (325 sensors, Bay Area).
 - Origin: Li, Yu, Shahabi, Liu, *"Diffusion Convolutional Recurrent Neural
   Network: Data-Driven Traffic Forecasting"*, ICLR 2018.
-- Download mirror used by `scripts/download_dataset.py`:
-  `https://graphmining.ai/temporal_datasets/METR-LA.zip` (the mirror used by
-  *PyTorch-Geometric-Temporal*). The DCRNN `metr-la.h5` + `adj_mx.pkl` layout and
-  a raw `.csv` are also auto-detected if you drop them into `data/source/`.
+### Download links (`scripts/download_dataset.py` fetches these automatically)
 
-**If a dataset already exists under `data/source/`, it is used as-is and nothing
-is downloaded.**
+Public, no-auth GitHub raw endpoints (verified 2026-09-01):
+
+**METR-LA** → `data/source/METR-LA/`
+
+| file | URL |
+|---|---|
+| `metr-la.h5` (57 MB, traffic speeds) | `https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/main/METRLA/metr-la.h5` |
+| `adj_mx.pkl` (sensor adjacency) | `https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/adj_mx.pkl` |
+| `graph_sensor_locations.csv` (lat/lon) | `https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_locations.csv` |
+| `graph_sensor_ids.txt` (sensor order) | `https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_ids.txt` |
+
+**PEMS-BAY** (alternative) → `data/source/PEMS-BAY/`
+
+| file | URL |
+|---|---|
+| `pems-bay.zip` (→ `pems-bay.h5`, 31 MB) | `https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/main/PEMSBAY/pems-bay.zip` |
+| `adj_mx_bay.pkl` | `https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/adj_mx_bay.pkl` |
+| `graph_sensor_locations_bay.csv` | `https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_locations_bay.csv` |
+
+Sources: time series vendored by **deepkashiwa20/DL-Traff-Graph**; sensor graph
+from the original **liyaguang/DCRNN** repo (Li et al., ICLR 2018). Legacy
+single-zip mirror (`graphmining.ai`) is kept in `config.yaml` as a last resort.
+
+**Manual download** (if the script has no network):
+
+```bash
+mkdir -p data/source/METR-LA
+cd data/source/METR-LA
+curl -LO https://raw.githubusercontent.com/deepkashiwa20/DL-Traff-Graph/main/METRLA/metr-la.h5
+curl -LO https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/adj_mx.pkl
+curl -LO https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_locations.csv
+curl -LO https://raw.githubusercontent.com/liyaguang/DCRNN/master/data/sensor_graph/graph_sensor_ids.txt
+```
+
+**If a dataset already exists under `data/source/<NAME>/`, it is used as-is and
+nothing is downloaded.** `data/` is git-ignored, so the dataset stays out of the
+repo and is reproducibly re-fetched by the script in a fresh Codespace.
 
 ## 4. Dataset license / usage
 

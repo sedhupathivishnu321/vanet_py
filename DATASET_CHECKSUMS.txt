@@ -1,0 +1,7 @@
+# SHA-256 checksums for the source dataset files (METR-LA)
+# verify:  python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <file>
+
+a35687c6e15aa228dc45027b0ed2a0ea0f4ec78f573deb992c595092d12f61b3  METR-LA/adj_mx.pkl  (680459 bytes)
+3ba026caa2e6263ab0ea54b0fa1b125dbfa7216544cd05313b555e826292b990  METR-LA/graph_sensor_ids.txt  (1448 bytes)
+eb8ea96e07358b45d0e4ba3b89c2673fa20c54af50150249e627389e749ade6f  METR-LA/graph_sensor_locations.csv  (6341 bytes)
+64784b76d6fb8ec9bff4b6decafb354da2bb37840468fdccee5044e511277c05  METR-LA/metr-la.h5  (57038056 bytes)

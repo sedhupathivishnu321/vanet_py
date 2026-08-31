@@ -1,18 +1,17 @@
 """Load a *real* public traffic dataset (METR-LA / PEMS-BAY) for source-domain
 pre-training.
 
-Supported on-disk layouts (auto-detected under ``data/source/``):
+Supported on-disk layouts (auto-detected recursively under ``data/source/``):
 
-1. PyTorch-Geometric-Temporal zip layout:
-       <root>/METR-LA/node_values.npy   (T, N, C)
-       <root>/METR-LA/adj_mat.npy       (N, N)
-2. DCRNN layout:
-       <root>/metr-la.h5   (pandas DataFrame, index=timestamps, cols=sensors)
-       <root>/adj_mx.pkl   (pickle: [sensor_ids, id_to_ind, adj_mx])
-3. Raw CSV:
-       <root>/METR-LA.csv  (index=timestamps, cols=sensors)
-4. Optional sensor coordinates:
-       <root>/graph_sensor_locations.csv  (sensor_id, latitude, longitude)
+1. DCRNN layout (what ``scripts/download_dataset.py`` fetches):
+       data/source/METR-LA/metr-la.h5    (pandas DataFrame, index=timestamps)
+       data/source/METR-LA/adj_mx.pkl    (pickle: [sensor_ids, id_to_ind, adj_mx])
+       data/source/METR-LA/graph_sensor_locations.csv  (index,sensor_id,lat,lon)
+2. PyTorch-Geometric-Temporal zip layout:
+       .../node_values.npy   (T, N, C)   +   .../adj_mat.npy   (N, N)
+3. Raw CSV: any ``*.csv`` (index=timestamps, cols=sensors) that is not a
+   sensor-graph auxiliary file.
+Sensor coordinates are aligned to the time-series column order by sensor id.
 
 If none is present and ``allow_synthetic_fallback`` is true, a clearly-labelled
 SYNTHETIC dataset is produced *for smoke testing only* -- every downstream
@@ -131,14 +130,31 @@ class SourceDataset:
 # --------------------------------------------------------------------------- #
 #  Loaders per layout
 # --------------------------------------------------------------------------- #
+def _find(root: Path, *patterns: str) -> list[str]:
+    """Recursive glob under `root` for any of the given patterns."""
+    out: list[str] = []
+    for p in patterns:
+        out += [str(x) for x in root.rglob(p)]
+    return sorted(set(out))
+
+
+def _prefer(paths: list[str], name: str) -> list[str]:
+    """Put files whose path mentions the configured dataset name first."""
+    key = name.lower().replace("-", "")
+    return sorted(paths, key=lambda p: (key not in Path(p).parent.name.lower()
+                                        .replace("-", ""), p))
+
+
+_AUX_CSV = ("sensor_locations", "locations", "sensor_ids", "_ids", "distances",
+            "adj", "w_", "se_")
+
+
 def _try_pyg_temporal(root: Path, name: str):
-    sub = root / name
-    nv, am = sub / "node_values.npy", sub / "adj_mat.npy"
-    if not nv.exists():
-        # some zips extract flat
-        nv, am = root / "node_values.npy", root / "adj_mat.npy"
-    if not nv.exists():
+    nvs = _prefer(_find(root, "node_values.npy"), name)
+    if not nvs:
         return None
+    nv = Path(nvs[0])
+    am = nv.with_name("adj_mat.npy")
     data = np.load(nv).astype(np.float32)
     if data.ndim == 2:
         data = data[:, :, None]
@@ -151,8 +167,7 @@ def _try_pyg_temporal(root: Path, name: str):
 
 
 def _try_dcrnn_h5(root: Path, name: str):
-    import glob
-    h5s = glob.glob(str(root / "*.h5"))
+    h5s = _prefer(_find(root, "*.h5"), name)
     if not h5s:
         return None
     import pandas as pd
@@ -160,45 +175,69 @@ def _try_dcrnn_h5(root: Path, name: str):
     arr = df.to_numpy(dtype=np.float32)[:, :, None]
     miss = np.isclose(arr[..., 0], 0.0)
     adj = None
-    for pkl in glob.glob(str(root / "*adj*.pkl")):
-        with open(pkl, "rb") as fh:
-            obj = pickle.load(fh, encoding="latin1")
-        adj = np.asarray(obj[-1], dtype=np.float32)
-        break
-    coords = _try_coords(root, list(df.columns))
+    for pkl in _find(root, "*adj*.pkl"):
+        try:
+            with open(pkl, "rb") as fh:
+                obj = pickle.load(fh, encoding="latin1")
+            adj = np.asarray(obj[-1], dtype=np.float32)
+            break
+        except Exception:
+            continue
+    coords = _try_coords(root, [str(c) for c in df.columns])
     return SourceDataset(name, arr, adj, coords, _SAMPLING_INTERVAL_S.get(name, 300),
                          False, ["speed"], "dcrnn_h5", missing_mask=miss)
 
 
 def _try_csv(root: Path, name: str):
-    import glob
-    csvs = [c for c in glob.glob(str(root / "*.csv"))
-            if "sensor_locations" not in Path(c).name.lower()]
+    csvs = [c for c in _prefer(_find(root, "*.csv"), name)
+            if not any(a in Path(c).name.lower() for a in _AUX_CSV)]
     if not csvs:
         return None
     import pandas as pd
     df = pd.read_csv(csvs[0], index_col=0)
     arr = df.to_numpy(dtype=np.float32)[:, :, None]
     miss = ~np.isfinite(arr[..., 0]) | np.isclose(arr[..., 0], 0.0)
-    coords = _try_coords(root, list(df.columns))
+    coords = _try_coords(root, [str(c) for c in df.columns])
     return SourceDataset(name, np.nan_to_num(arr), None, coords,
                          _SAMPLING_INTERVAL_S.get(name, 300), False, ["speed"],
                          "raw_csv", missing_mask=miss)
 
 
 def _try_coords(root: Path, sensor_ids: list) -> Optional[np.ndarray]:
-    import glob
-    for c in glob.glob(str(root / "*sensor_locations*.csv")) + \
-             glob.glob(str(root / "*locations*.csv")):
+    """Return (N, 2) lat/lon **aligned to `sensor_ids` order** where possible.
+
+    Handles both the METR-LA layout (`index,sensor_id,latitude,longitude` with
+    a header) and the PEMS-BAY layout (`id,lat,lon`, no header).
+    """
+    import pandas as pd
+    for c in _find(root, "*sensor_locations*.csv", "*locations*.csv"):
         try:
-            import pandas as pd
-            loc = pd.read_csv(c)
-            lat_col = next(x for x in loc.columns if "lat" in x.lower())
-            lon_col = next(x for x in loc.columns if "lon" in x.lower())
+            head = pd.read_csv(c, nrows=1, header=None).iloc[0].tolist()
+            has_header = not _looks_numeric(head[0])
+            loc = pd.read_csv(c) if has_header else pd.read_csv(
+                c, header=None, names=["sensor_id", "latitude", "longitude"])
+            lat_col = next(x for x in loc.columns if "lat" in str(x).lower())
+            lon_col = next(x for x in loc.columns if "lon" in str(x).lower())
+            id_col = next((x for x in loc.columns
+                           if "id" in str(x).lower() and "index" not in str(x).lower()),
+                          None)
+            if id_col is not None and sensor_ids:
+                m = {str(r[id_col]): (float(r[lat_col]), float(r[lon_col]))
+                     for _, r in loc.iterrows()}
+                if all(str(s) in m for s in sensor_ids):
+                    return np.array([m[str(s)] for s in sensor_ids], dtype=np.float64)
             return loc[[lat_col, lon_col]].to_numpy(dtype=np.float64)
         except Exception:
             continue
     return None
+
+
+def _looks_numeric(x) -> bool:
+    try:
+        float(x)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def _synthetic(name: str, num_nodes: int = 40, days: int = 14,
