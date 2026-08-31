@@ -114,9 +114,15 @@ def corridor_to_ml_graph(G, route_nodes: list) -> dict:
 def build_corridors(G, cfg, logger=None) -> list[CorridorResult]:
     results: list[CorridorResult] = []
     features = []
+    offline = bool(getattr(G, "graph", {}).get("synthetic"))
+    if offline and logger:
+        logger.warning("  graph is the offline synthetic fallback -> skipping "
+                       "Nominatim geocoding, using config endpoint coordinates")
     for c in cfg["osm"]["corridors"]:
-        o_lat, o_lon, o_fb = geocode_point(c["origin"], c["origin_fallback"], logger)
-        d_lat, d_lon, d_fb = geocode_point(c["destination"], c["destination_fallback"], logger)
+        o_lat, o_lon, o_fb = geocode_point(c["origin"], c["origin_fallback"],
+                                           logger, offline=offline)
+        d_lat, d_lon, d_fb = geocode_point(c["destination"], c["destination_fallback"],
+                                           logger, offline=offline)
         na = _nearest_node(G, o_lat, o_lon)
         nb = _nearest_node(G, d_lat, d_lon)
         route = _shortest_path(G, na, nb)

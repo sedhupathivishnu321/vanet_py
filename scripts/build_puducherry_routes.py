@@ -19,7 +19,7 @@ from _common import base_parser, load, env_info
 def main() -> int:
     args = base_parser(__doc__).parse_args()
     cfg, log = load(args)
-    from src.osm.download import load_graph
+    from src.osm.download import load_graph, download_puducherry_graph
     from src.osm.corridors import build_corridors
     from src.utils import ExperimentLogger
 
@@ -28,9 +28,10 @@ def main() -> int:
                           env_info()) as elog:
         try:
             G = load_graph(cfg)
-        except FileNotFoundError as exc:
-            log.error(str(exc))
-            return 1
+        except FileNotFoundError:
+            log.warning("puducherry.graphml missing - building it now "
+                        "(scripts/download_osm.py was skipped or failed)")
+            G = download_puducherry_graph(cfg, logger=log)
         results = build_corridors(G, cfg, logger=log)
         for r in results:
             elog.add_metrics(**{f"{r.id}_length_m": r.length_m,

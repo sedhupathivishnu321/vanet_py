@@ -23,16 +23,21 @@ def main() -> int:
         try:
             G = download_puducherry_graph(cfg, logger=log)
         except Exception as exc:
-            log.error(f"OSM download failed: {exc}")
-            log.error("If this Codespace has no internet, place a pre-downloaded "
-                      "data/osm/puducherry.graphml and re-run the rest.")
+            log.error(f"OSM download failed unexpectedly: {exc}")
             return 1
         prov = provenance()
         elog.add_metrics(n_nodes=G.number_of_nodes(), n_edges=G.number_of_edges(),
-                         method=prov.get("method"),
+                         method=prov.get("method"), synthetic=prov.get("synthetic"),
                          n_fallbacks=len(prov.get("fallbacks", [])))
         elog.add_artifact(Path(cfg["_meta"]["repo_root"]) / cfg["osm"]["graphml"])
-    log.info("OSM network ready.")
+    if prov.get("synthetic"):
+        log.warning("OSM network is the OFFLINE SYNTHETIC fallback "
+                    "(Overpass unreachable). Downstream stages will run; the "
+                    "report will state the network was synthetic. To use the "
+                    "real network, re-run scripts/download_osm.py with Overpass "
+                    "access or drop a real data/osm/puducherry.graphml in place.")
+    else:
+        log.info(f"OSM network ready via {prov.get('method')}.")
     return 0
 
 
