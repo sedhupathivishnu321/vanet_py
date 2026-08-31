@@ -98,15 +98,20 @@ def main() -> int:
                 m = _evaluate(cfg, model, adj_t, sc["tensors"], device)
                 if m is None:
                     continue
+                ds = sc["partial_obs"].delivery_stats
                 m.update(sweep=sweep, penetration=kw["penetration"],
                          pdr=kw["pdr"], latency_ms=kw["latency_ms"], seed=seed,
                          mean_aoi=sc["partial_obs"].aoi_stats["mean"],
                          p95_aoi=sc["partial_obs"].aoi_stats["p95"],
-                         cell_coverage=sc["partial_obs"].delivery_stats["mean_cell_coverage"],
+                         cell_coverage=ds["mean_cell_coverage"],
+                         realized_pdr=ds.get("realized_pdr"),
+                         realized_latency_ms=ds.get("realized_mean_latency_ms"),
+                         comm_backend=sc.get("comm_backend", "analytic"),
                          used_pretrained=used, backend=sc["backend"])
                 raw.append(m)
                 log.info(f"  {sweep}={val} seed={seed}  RMSE={m['RMSE']} "
-                         f"meanAoI={m['mean_aoi']} cov={m['cell_coverage']}")
+                         f"meanAoI={m['mean_aoi']} cov={m['cell_coverage']} "
+                         f"comm={sc.get('comm_backend','analytic')}")
 
     log.info("--- penetration sweep ---"); _run_grid("penetration", v["penetration"], "penetration")
     log.info("--- PDR sweep ---");         _run_grid("pdr", v["pdr"], "pdr")
@@ -143,7 +148,13 @@ def main() -> int:
                                 ["RMSE", "MAE", "R2", "mean_aoi", "p95_aoi",
                                  "cell_coverage", "PICP_95", "unc_err_corr",
                                  "aoi_err_pearson"])
-            row = {"sweep": sweep, key: val, "n_seeds": len(g)}
+            row = {"sweep": sweep, key: val, "n_seeds": len(g),
+                   "comm_backend": g["comm_backend"].mode().iloc[0]
+                   if "comm_backend" in g else "analytic",
+                   "realized_pdr_mean": round(float(g["realized_pdr"].dropna().mean()), 4)
+                   if "realized_pdr" in g and g["realized_pdr"].notna().any() else None,
+                   "realized_latency_ms_mean": round(float(g["realized_latency_ms"].dropna().mean()), 2)
+                   if "realized_latency_ms" in g and g["realized_latency_ms"].notna().any() else None}
             for k, vv in a.items():
                 row[f"{k}_mean"] = vv["mean"]; row[f"{k}_std"] = vv["std"]
             # ensure the plotting columns exist
@@ -163,8 +174,8 @@ def main() -> int:
     so = sc["sim_out"]
     frame = so.vehicle_frames[-1] if so.vehicle_frames else np.zeros((0, 7))
     chan = sc["partial_obs"]
-    connected = np.array([1 if (int(r[0]) % 100) < int(sc["comm"]["penetration"] * 100)
-                          else 0 for r in frame])
+    conn_set = set(sc.get("connected_veh_ids", []))
+    connected = np.array([1 if int(r[0]) in conn_set else 0 for r in frame])
     np.savez(proc / "vanet_default.npz",
              times=so.times, aoi=chan.aoi,
              corridor_coords=np.array(sc["corridor"]["route_coords"], float),

@@ -13,7 +13,8 @@ from pathlib import Path
 import numpy as np
 
 from src.sumo import run_target_simulation
-from src.vanet import CommunicationChannel, build_partial_observation
+from src.vanet import (CommunicationChannel, build_partial_observation,
+                       ns3_available, build_partial_observation_ns3, Ns3Unavailable)
 from src.preprocessing.target_features import build_target_tensors
 from src.preprocessing.graph import normalize_adjacency
 
@@ -62,15 +63,40 @@ def run_scenario(cfg, corridor_id: str, seed: int, demand_level: str | None = No
     corridor = load_corridor(cfg, corridor_id)
     sim_out = run_target_simulation(cfg, corridor, demand_level, seed,
                                     controller=controller, logger=logger)
-    channel = CommunicationChannel(penetration, pdr, latency_ms, seed=seed)
-    po = build_partial_observation(sim_out, channel, cfg)
+
+    backend = str(v.get("backend", "analytic")).lower()
+    comm_backend = "analytic"
+    connected_ids: list = []
+    if backend == "ns3":
+        if ns3_available(cfg):
+            try:
+                po = build_partial_observation_ns3(sim_out, cfg, penetration, seed,
+                                                   logger=logger)
+                comm_backend = "ns3"
+                from src.vanet.mobility_export import export_ns2_mobility
+                connected_ids = export_ns2_mobility(
+                    sim_out, Path(cfg["_meta"]["repo_root"]) / "data" / "vanet"
+                    / "_equipped.tcl", penetration, seed).equipped_veh_ids
+            except Ns3Unavailable as exc:
+                if logger:
+                    logger.warning(f"  ns-3 backend failed ({str(exc)[:120]}); "
+                                   f"falling back to analytic channel")
+        elif logger:
+            logger.warning("  vanet.backend=ns3 but ns-3 not found "
+                           "(run ns3/setup_ns3.sh); using analytic channel")
+    if comm_backend == "analytic":
+        channel = CommunicationChannel(penetration, pdr, latency_ms, seed=seed)
+        po = build_partial_observation(sim_out, channel, cfg)
+        connected_ids = channel.connected_ids()
+
     tensors = build_target_tensors(po, cfg, seed=seed)
     adj = normalize_adjacency(chain_adjacency(sim_out.n_cells))
     return {"corridor": corridor, "sim_out": sim_out, "partial_obs": po,
-            "tensors": tensors, "adj_norm": adj,
+            "tensors": tensors, "adj_norm": adj, "connected_veh_ids": connected_ids,
             "comm": {"penetration": penetration, "pdr": pdr,
-                     "latency_ms": latency_ms, "demand_level": demand_level},
-            "backend": sim_out.backend}
+                     "latency_ms": latency_ms, "demand_level": demand_level,
+                     "backend": comm_backend},
+            "backend": sim_out.backend, "comm_backend": comm_backend}
 
 
 # --------------------------------------------------------------------------- #

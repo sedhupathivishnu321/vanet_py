@@ -121,6 +121,7 @@ osm:
   place: "Puducherry, India"
   fallback_center: [11.9338, 79.8298]   # lat, lon  (used only if geocode fails)
   fallback_radius_m: 6000
+  bbox_margin_m: 1200                    # margin around the corridors for the Overpass bbox
   network_type: drive
   graphml: data/osm/puducherry.graphml
   corridor_geojson: data/osm/corridor_routes.geojson
@@ -161,6 +162,15 @@ sumo:
 
 # ----------------------------------------------------------------- VANET
 vanet:
+  backend: analytic            # analytic | ns3   (ns3 auto-falls-back if not built)
+  ns3:
+    ns3_dir: ""               # empty -> $NS3_DIR or <repo>/ns-3-dev
+    phy_mode: OfdmRate6MbpsBW10MHz
+    propagation: LogDistance  # LogDistance | Nakagami | Friis
+    tx_power_dbm: 20
+    beacon_hz: 10
+    packet_bytes: 200
+    timeout_s: 2400
   penetration: [0.10, 0.20, 0.30, 0.50, 0.70, 1.00]
   pdr:         [0.70, 0.80, 0.90, 0.95, 1.00]
   latency_ms:  [0, 20, 50, 100, 200, 500]

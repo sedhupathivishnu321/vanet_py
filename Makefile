@@ -5,7 +5,7 @@
 PY ?= python
 PROFILE ?= --quick
 
-.PHONY: help env quick full test clean dashboard \
+.PHONY: help env quick full test clean dashboard ns3-setup \
         dataset inspect osm routes sumo train transfer vanet \
         eval-pred control eval-control report figures map
 
@@ -34,6 +34,10 @@ test:
 
 dashboard:
 	streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+
+ns3-setup:
+	bash ns3/setup_ns3.sh
+	@echo "then set  vanet.backend: ns3  in config.yaml"
 
 dataset:
 	$(PY) scripts/download_dataset.py $(PROFILE)

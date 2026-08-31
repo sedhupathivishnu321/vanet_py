@@ -12,6 +12,8 @@ data/source/*
 !data/source/.gitkeep
 data/osm/*
 !data/osm/.gitkeep
+# bundled real OSM extract (offline fallback for corridor routing)
+!data/osm/puducherry.osm.bz2
 data/sumo/*
 !data/sumo/.gitkeep
 data/target/*

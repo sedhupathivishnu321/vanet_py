@@ -5,6 +5,9 @@ from .download import (
     geocode_point,
     load_graph,
     provenance,
+    raw_osm_path,
+    bundled_osm_path,
+    bbox_from_corridors,
 )
 from .corridors import build_corridors, corridor_to_ml_graph, CorridorResult
 
@@ -15,6 +18,9 @@ __all__ = [
     "geocode_point",
     "load_graph",
     "provenance",
+    "raw_osm_path",
+    "bundled_osm_path",
+    "bbox_from_corridors",
     "build_corridors",
     "corridor_to_ml_graph",
     "CorridorResult",

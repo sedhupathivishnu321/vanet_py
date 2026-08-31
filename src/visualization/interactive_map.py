@@ -20,14 +20,27 @@ def build_interactive_map(cfg, vanet_npz: str | None = None,
     gj_path = root / cfg["osm"]["corridor_geojson"]
     m = folium.Map(location=center, zoom_start=13, tiles="cartodbpositron")
 
-    # data-provenance banner (spec section 51)
+    # provenance banner -- reflects what actually produced this run
+    import json as _json
+    prov = {}
+    pp = root / "data" / "osm" / "osm_provenance.json"
+    if pp.exists():
+        try:
+            prov = _json.loads(pp.read_text())
+        except Exception:
+            pass
+    road = ("OpenStreetMap - SYNTHETIC anchored fallback" if prov.get("synthetic")
+            else f"OpenStreetMap (real streets) via {prov.get('method', 'download')}")
+    vb = str(cfg.get("vanet", {}).get("backend", "analytic")).lower()
+    comm = ("ns-3 IEEE 802.11p (PDR / latency / AoI emerge from PHY+MAC)"
+            if vb == "ns3" else "analytic model (Bernoulli PDR / latency / AoI)")
     banner = ('<div style="position:fixed;top:8px;left:8px;z-index:9999;'
               'background:white;padding:8px 12px;border:1px solid #888;'
               'font:12px sans-serif;border-radius:6px">'
               '<b>SOURCE DATASET:</b> REAL PUBLIC DATA (METR-LA/PEMS-BAY)<br>'
-              '<b>ROAD NETWORK:</b> OpenStreetMap (real geometry)<br>'
-              '<b>PUDUCHERRY TARGET TRAFFIC:</b> SIMULATED<br>'
-              '<b>VANET COMMUNICATION:</b> SIMULATED (PDR / latency / AoI)</div>')
+              f'<b>ROAD NETWORK:</b> {road}<br>'
+              '<b>PUDUCHERRY TARGET TRAFFIC:</b> SIMULATED (SUMO / IDM)<br>'
+              f'<b>VANET COMMUNICATION:</b> SIMULATED - {comm}</div>')
     m.get_root().html.add_child(folium.Element(banner))
 
     colors = {"corridor_1": "#d1495b", "corridor_2": "#2a9d8f"}

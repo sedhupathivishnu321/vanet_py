@@ -112,19 +112,34 @@ with the original terms. This repo redistributes **no data**, only download
 scripts pointing at public mirrors. OSM data © OpenStreetMap contributors (ODbL).
 Nominatim used lightly + cached. SUMO is EPL-2.0. See `LICENSE`.
 
-## 5. OSM methodology
+## 5. OSM methodology (automatic download)
 
-`scripts/download_osm.py` calls `osmnx.graph_from_place("Puducherry, India",
-network_type="drive")` (fallback: a 6 km bounding circle around
-11.9338 N, 79.8298 E). Edge speeds/travel-times are imputed from OSM tags where
-present. `scripts/build_puducherry_routes.py` geocodes the four endpoints with
-Nominatim, snaps to nearest OSM nodes, routes by shortest length, and exports:
+`scripts/download_osm.py` retrieves the **real** Puducherry driving network,
+trying, in order (all with a short timeout, `method` recorded in
+`osm_provenance.json`):
+
+1. **Direct Overpass HTTP** query for a *tight bounding box around the two study
+   corridors* (`bbox_from_corridors`, ~1.2 km margin) — small area, fast, no
+   Overpass area-limit splitting. Saves `data/osm/puducherry.osm` (also feeds
+   SUMO and ns-3).
+2. `osmnx.graph_from_bbox` on the same box across **6 Overpass mirrors**
+   (overpass-api.de, kumi.systems, private.coffee, maps.mail.ru, osm.ch, osm.ru).
+3. `graph_from_point` / `graph_from_place` (wider).
+4. **Bundled real extract** — `data/osm/puducherry.osm.bz2` (327 KB, 5 265 ways,
+   21 287 nodes) shipped in the repo, so the corridors follow **real streets even
+   with no internet**.
+5. Only if all of the above fail: an offline anchored fallback graph (straight
+   corridor lines), clearly stamped `synthetic: true`.
+
+`scripts/build_puducherry_routes.py` geocodes the four endpoints (Nominatim;
+falls back to the config coordinates when offline), snaps to nearest OSM nodes,
+routes by shortest length **along real edges**, and exports:
 
 ```
-data/osm/puducherry.graphml
+data/osm/puducherry.graphml   data/osm/puducherry.graphml.pkl   data/osm/puducherry.osm
 data/osm/corridor_routes.geojson
 data/osm/corridor_1_ml_graph.json   data/osm/corridor_2_ml_graph.json
-data/osm/osm_provenance.json        # retrieval date, method, every fallback used
+data/osm/osm_provenance.json        # retrieval date, method, bbox, every fallback used
 ```
 
 Missing OSM attributes are recorded as `null`, never fabricated.
@@ -140,18 +155,35 @@ Each corridor is converted to a node/edge ML graph with
 `latitude, longitude, degree, intersection_indicator` (nodes) and
 `length, road_class, speed_limit, travel_time, lanes` (edges).
 
-## 7. VANET model
+## 7. VANET model — two backends (`config.yaml → vanet.backend`)
 
 Each connected vehicle beacons `id, timestamp, position, speed, acceleration,
-heading, road_segment` every `beacon_interval_s`. The channel applies:
+heading, road_segment` every `beacon_interval_s`.
 
-- **Penetration** — a persistent per-vehicle Bernoulli(`penetration`) connected flag.
+### `analytic` (default)
+- **Penetration** — a persistent per-vehicle Bernoulli(`penetration`) flag.
 - **PDR** — per beacon, `M_received ~ Bernoulli(PDR)`.
 - **Latency** — a beacon generated at `t` is *usable only from* `t + latency`
-  (it arrives later in simulation time; it is not merely deleted).
+  (+ exponential jitter); it arrives later in simulation time, not merely deleted.
 
 Sweeps: penetration ∈ {0.10, 0.20, 0.30, 0.50, 0.70, 1.00}; PDR ∈ {0.70, 0.80,
 0.90, 0.95, 1.00}; latency ∈ {0, 20, 50, 100, 200, 500} ms.
+
+### `ns3` — real IEEE 802.11p simulation
+```
+bash ns3/setup_ns3.sh          # clone + build ns-3.42 (~20-40 min); see ns3/README.md
+# then set  vanet.backend: ns3  in config.yaml
+```
+The IDM/SUMO trajectories of the equipped vehicles are exported to an ns-2
+mobility trace (`src/vanet/mobility_export.py`); `ns3/vanet-beacon.cc`
+(YansWifiChannel, `Wifi80211pHelper`, LogDistance / Nakagami / Friis) broadcasts
+BSMs at 10 Hz; the beacon-reception trace is parsed back
+(`src/vanet/ns3_channel.py`) into the **same** `PartialObservation`. **PDR,
+latency and AoI emerge** from the PHY/MAC + mobility; the sweep is over
+penetration and ns-3 regime knobs (Tx power, propagation model). Realised PDR /
+latency are recorded per row (`comm_backend`, `realized_pdr`,
+`realized_latency_ms`). **If ns-3 is not built, the pipeline logs a warning and
+uses the analytic channel — nothing hard-fails.**
 
 ## 8. AoI formulation
 
@@ -337,7 +369,10 @@ Generated, not hand-written. After a run see:
 - Source sensor coordinates may be unavailable → source graph from adjacency only.
 - Only the hidden-space encoder transfers when input parametrisations differ.
 - `--quick`/`--smoke` numbers are indicative, not final.
-- The VANET channel is a stochastic abstraction, not a full PHY/MAC (no ns-3/Veins).
+- The default `analytic` VANET channel is a stochastic abstraction. Set
+  `vanet.backend: ns3` (after `bash ns3/setup_ns3.sh`) for a real IEEE 802.11p
+  PHY/MAC simulation; the ns-3 corridor is still a 1-D layout and V2V backhaul is
+  assumed (a BSM is "collected" once any other equipped vehicle receives it).
 
 ## 18. Reproducibility
 

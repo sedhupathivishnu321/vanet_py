@@ -71,3 +71,6 @@ class CommunicationChannel:
     @property
     def realized_pdr(self) -> float:
         return self.delivered / self.sent if self.sent else 0.0
+
+    def connected_ids(self) -> list[int]:
+        return sorted(v for v, c in self._connected.items() if c)
