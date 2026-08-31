@@ -1,0 +1,12 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+Makefile text eol=lf
+*.png binary
+*.graphml binary
+*.h5 binary
+*.npy binary
+*.npz binary
