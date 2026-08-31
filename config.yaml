@@ -1,0 +1,207 @@
+# =========================================================================
+# Master configuration for puducherry-vanet-transfer
+# Every script reads this file. CLI flags override individual keys.
+# "quick" profile keys are applied automatically by run_all.py --quick.
+# =========================================================================
+
+project:
+  name: puducherry-vanet-transfer
+  seed_default: 42
+  device: auto            # auto | cpu | cuda
+  outputs_dir: outputs
+  data_dir: data
+  models_dir: models
+
+# ------------------------------------------------------------------ source
+source_dataset:
+  name: METR-LA                 # METR-LA | PEMS-BAY
+  root: data/source
+  # If a dataset is already present under `root` it is used as-is.
+  # Otherwise download_dataset.py fetches it from the public mirror below.
+  mirrors:
+    METR-LA:
+      - https://graphmining.ai/temporal_datasets/METR-LA.zip
+    PEMS-BAY:
+      - https://graphmining.ai/temporal_datasets/PEMS-BAY.zip
+  gaussian_kernel_sigma: null   # null -> use std of finite distances
+  adjacency_threshold: 0.1      # sparsify weighted adjacency below this
+  allow_synthetic_fallback: true   # ONLY for smoke tests; stamps outputs SYNTHETIC
+
+# ---------------------------------------------------------------- training
+training:
+  history_length: 12            # source-domain window (one step = 5 min)
+  prediction_horizon: 12
+  target_history_length: 12     # target-domain window (one step = aggregate_interval_s)
+  target_prediction_horizon: 12
+  epochs: 60
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 1.0e-5
+  hidden_dim: 64
+  dropout: 0.15
+  early_stopping_patience: 12
+  grad_clip: 5.0
+  split: [0.7, 0.15, 0.15]      # chronological train / val / test
+  window_stride: 1              # subsample sliding windows (raise to speed up)
+  max_train_windows: null       # optional hard cap on #training windows
+  num_workers: 0
+
+# --------------------------------------------------------------- baselines
+baselines:
+  enabled:
+    - historical_average
+    - linear_regression
+    - random_forest
+    - lstm
+    - gru
+    - gcn
+    - gat
+    - stgnn
+    - transformer
+  random_forest:
+    n_estimators: 120
+    max_depth: 16
+
+# ------------------------------------------------------ proposed / losses
+proposed_model:
+  spatial_encoder: gat          # gcn | gat
+  temporal_encoder: gru         # gru | transformer
+  gat_heads: 4
+  aoi_attention: true           # AoI-conditioned attention bias (beta * AoI_j)
+  aoi_beta: 1.0
+loss_weights:
+  prediction: 1.0
+  aoi: 0.1                       # lambda_1
+  physics: 0.1                   # lambda_2
+  domain: 0.1                    # lambda_3
+  smooth: 0.05                   # lambda_4
+physics:
+  dt_seconds: 300               # source dataset sampling interval (METR-LA = 5 min)
+  use_jerk: true
+
+# ---------------------------------------------------------------- transfer
+transfer:
+  strategies:                   # evaluated & compared
+    - none                      # train target from scratch
+    - frozen_encoder            # Strategy A
+    - full_finetune             # Strategy B
+    - frozen_encoder_da         # Strategy A + domain adaptation
+  freeze_encoder: true
+  finetune_lr: 0.0002
+  finetune_epochs: 40
+  domain_adaptation: true
+  adaptation_loss: mmd          # mmd | coral
+  adaptation_weight: 0.1        # lambda_DA
+
+# ----------------------------------------------------------------- OSM
+osm:
+  place: "Puducherry, India"
+  fallback_center: [11.9338, 79.8298]   # lat, lon  (used only if geocode fails)
+  fallback_radius_m: 6000
+  network_type: drive
+  graphml: data/osm/puducherry.graphml
+  corridor_geojson: data/osm/corridor_routes.geojson
+  corridors:
+    - id: corridor_1
+      name: "Reddiyarpalayam -> Beach Road"
+      origin: "Reddiyarpalayam, Puducherry, India"
+      destination: "Beach Road, Puducherry, India"
+      origin_fallback: [11.9166, 79.8039]
+      destination_fallback: [11.9310, 79.8360]
+    - id: corridor_2
+      name: "Nainarmandapam -> Lawspet"
+      origin: "Nainarmandapam, Puducherry, India"
+      destination: "Lawspet, Puducherry, India"
+      origin_fallback: [11.8969, 79.8156]
+      destination_fallback: [11.9525, 79.8072]
+
+# ----------------------------------------------------------------- SUMO
+sumo:
+  net_xml: data/sumo/puducherry.net.xml
+  use_sumo_if_available: true
+  fallback_simulator: idm       # built-in IDM corridor micro-simulator
+  step_length_s: 1.0
+  warmup_s: 300
+  sim_duration_s: 3600
+  aggregate_interval_s: 1          # traffic-state bin = one model time step (1 s)
+  control_decision_interval_s: 10  # signal-controller decision cadence
+  demand_levels:                # vehicles injected over sim_duration
+    LOW: 200
+    MEDIUM: 500
+    HIGH: 900
+    VERY_HIGH: 1500
+  traffic_light:
+    cycle_s: 90
+    min_green_s: 10
+    max_green_s: 60
+    yellow_s: 3
+
+# ----------------------------------------------------------------- VANET
+vanet:
+  penetration: [0.10, 0.20, 0.30, 0.50, 0.70, 1.00]
+  pdr:         [0.70, 0.80, 0.90, 0.95, 1.00]
+  latency_ms:  [0, 20, 50, 100, 200, 500]
+  beacon_interval_s: 1.0
+  aoi_cap_s: 120               # a segment with no update for this long -> "unknown"
+  aoi_fresh_cap_s: 60          # a cell with AoI above this is treated as unobserved
+  aoi_settle_s: 60             # exclude this warm-up window from AoI summary stats
+  default_penetration: 0.30
+  default_pdr: 0.90
+  default_latency_ms: 100
+  stress_test:
+    worst:  { penetration: 0.10, pdr: 0.70, latency_ms: 500 }
+    best:   { penetration: 1.00, pdr: 1.00, latency_ms: 0 }
+    mid:    { penetration: 0.50, pdr: 0.90, latency_ms: 100 }
+
+# ------------------------------------------------------------- uncertainty
+uncertainty:
+  method: mc_dropout            # mc_dropout | ensemble
+  mc_samples: 30
+  ensemble_size: 5
+  quick_mc_samples: 10
+
+# ----------------------------------------------------------------- control
+control:
+  controllers:
+    - fixed
+    - max_pressure
+    - mpc
+    - dqn
+    - proposed
+  minimum_ttc: 2.0
+  horizon: 10
+  mpc_weights: { delay: 1.0, queue: 1.0, stops: 0.5, travel_time: 1.0, risk: 2.0 }
+  proposed_weights: { traffic: 1.0, aoi: 0.5, uncertainty: 0.8, safety: 2.0 }
+  dqn:
+    episodes: 60
+    gamma: 0.95
+    epsilon_decay: 0.97
+    lr: 0.0005
+    replay_size: 5000
+
+# --------------------------------------------------------------- experiments
+experiments:
+  seeds: [42, 123, 2024, 3407, 7777]
+  demand_for_vanet_sweep: HIGH
+  demand_for_control: HIGH
+  corridor_for_sweeps: corridor_1
+  significance_alpha: 0.05
+
+# ------------------------------------------------------------- quick profile
+# Applied on top of the above when run_all.py --quick is used, so the whole
+# pipeline finishes in ~15-25 min on a 4-core Codespace with no GPU.
+quick:
+  training: { epochs: 6, batch_size: 64, hidden_dim: 32, window_stride: 4,
+              max_train_windows: 4000,
+              target_history_length: 8, target_prediction_horizon: 6 }
+  transfer: { finetune_epochs: 6 }
+  baselines: { enabled: [historical_average, linear_regression, gru, gcn, stgnn] }
+  sumo: { warmup_s: 120, sim_duration_s: 1800,
+          demand_levels: { LOW: 100, MEDIUM: 250, HIGH: 450, VERY_HIGH: 700 } }
+  vanet:
+    penetration: [0.10, 0.30, 0.70, 1.00]
+    pdr: [0.70, 0.90, 1.00]
+    latency_ms: [0, 100, 500]
+  uncertainty: { mc_samples: 10 }
+  control: { dqn: { episodes: 12 } }
+  experiments: { seeds: [42, 123] }
