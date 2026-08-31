@@ -224,10 +224,12 @@ experiments:
 # Applied on top of the above when run_all.py --quick is used, so the whole
 # pipeline finishes in ~15-25 min on a 4-core Codespace with no GPU.
 quick:
-  training: { epochs: 6, batch_size: 64, hidden_dim: 32, window_stride: 4,
-              max_train_windows: 4000,
+  # tuned to run on a small machine (~4 GB free RAM). The dense GAT attention
+  # tensor is O(batch * L * N^2), so batch_size is kept small.
+  training: { epochs: 5, batch_size: 12, hidden_dim: 24, window_stride: 4,
+              max_train_windows: 1800,
               target_history_length: 8, target_prediction_horizon: 6 }
-  transfer: { finetune_epochs: 6 }
+  transfer: { finetune_epochs: 5 }
   baselines: { enabled: [historical_average, linear_regression, gru, gcn, stgnn] }
   sumo: { warmup_s: 120, sim_duration_s: 1800,
           demand_levels: { LOW: 100, MEDIUM: 250, HIGH: 450, VERY_HIGH: 700 } }

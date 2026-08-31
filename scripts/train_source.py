@@ -74,7 +74,11 @@ def main() -> int:
     proc.mkdir(parents=True, exist_ok=True)
 
     log.info(f"device={device}  seeds={seeds}  models={enabled + ['proposed']}")
+    log.info("building source-domain windows from METR-LA (this takes ~30-60s) ...")
     prep = prepare_source_domain(cfg)
+    log.info(f"  windows: train={len(prep['torch']['train']['x'])} "
+             f"val={len(prep['torch']['val']['x'])} test={len(prep['torch']['test']['x'])}  "
+             f"nodes={prep['num_nodes']} in_dim={prep['in_dim']}")
     if prep["is_synthetic"]:
         log.warning("SOURCE DATASET IS SYNTHETIC - results are for smoke "
                     "testing only and are stamped accordingly.")
@@ -122,11 +126,12 @@ def main() -> int:
                          "random_forest")] + ["proposed"]
         for name in torch_models:
             set_seed(seed)
+            log.info(f"  [{name}] seed={seed} training ...")
             model = build_model(name, Cin, N, H, cfg, adj=prep["adj_norm"])
             res = train_torch_model(
                 model, prep["torch"]["train"], prep["torch"]["val"], cfg, adj_t,
                 device, full_objective=(name == "proposed"),
-                speed_scale=prep["speed_scale_mps"], seed=seed, logger=None)
+                speed_scale=prep["speed_scale_mps"], seed=seed, logger=log)
             m, _ = _evaluate_torch(model, prep["torch"]["test"], adj_t,
                                    prep["scaler"], device)
             m.update(model=name, seed=seed,

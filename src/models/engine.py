@@ -82,6 +82,17 @@ def train_torch_model(
         except TypeError:
             return model(x, adj_t)
 
+    def _fwd_batched(model, x, aoi, chunk=24):
+        """Memory-safe forward for a large eval set: the dense GAT attention
+        tensor is O(B*L*N^2), so run the val/test set in chunks and concat."""
+        if x.shape[0] <= chunk:
+            return _fwd(model, x, aoi)
+        outs = []
+        for i in range(0, x.shape[0], chunk):
+            ab = aoi[i:i + chunk] if aoi is not None else None
+            outs.append(_fwd(model, x[i:i + chunk], ab))
+        return torch.cat(outs, dim=0)
+
     best_val = float("inf")
     best_state = copy.deepcopy(model.state_dict())
     patience = int(tr["early_stopping_patience"])
@@ -121,7 +132,7 @@ def train_torch_model(
 
         model.eval()
         with torch.no_grad():
-            vpred = _fwd(model, Xva, aoi_va)
+            vpred = _fwd_batched(model, Xva, aoi_va)
             vloss = float(masked_mae(vpred, Yva))
         sched.step(vloss)
         history.append({"epoch": ep, "train_loss": ep_loss / max(nb, 1),
@@ -151,7 +162,7 @@ def train_torch_model(
 
 @torch.no_grad()
 def predict_torch(model, x: torch.Tensor, adj_t, aoi=None, device="cpu",
-                  batch_size: int = 128) -> np.ndarray:
+                  batch_size: int = 64) -> np.ndarray:
     model.to(device).eval()
     outs = []
     for i in range(0, x.shape[0], batch_size):

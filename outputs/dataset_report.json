@@ -1,0 +1,29 @@
+{
+  "dataset_name": "METR-LA",
+  "is_synthetic": false,
+  "num_nodes": 207,
+  "num_timestamps": 34272,
+  "sampling_interval_s": 300,
+  "num_features": 1,
+  "feature_names": [
+    "speed"
+  ],
+  "missing_value_fraction": 0.081094,
+  "missing_value_count": 575302,
+  "geographic_information": true,
+  "adjacency_available": true,
+  "traffic_variables": [
+    "speed_mph"
+  ],
+  "value_min": 0.3333333432674408,
+  "value_max": 70.0,
+  "value_mean": 58.45972533258661,
+  "value_std": 13.023601584743359,
+  "train_samples": 23967,
+  "val_samples": 5117,
+  "test_samples": 5119,
+  "history_length": 12,
+  "prediction_horizon": 12,
+  "source_layout": "dcrnn_h5",
+  "notes": []
+}

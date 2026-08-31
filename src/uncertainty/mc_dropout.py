@@ -26,7 +26,7 @@ def _forward(model, x, adj_t, aoi):
 
 @torch.no_grad()
 def mc_dropout_predict(model, x: torch.Tensor, adj_t, aoi=None, K: int = 30,
-                       device: str = "cpu", batch_size: int = 128):
+                       device: str = "cpu", batch_size: int = 64):
     model.to(device).eval()
     enable_dropout(model)
     means = []
@@ -43,7 +43,7 @@ def mc_dropout_predict(model, x: torch.Tensor, adj_t, aoi=None, K: int = 30,
 
 @torch.no_grad()
 def ensemble_predict(models: list, x: torch.Tensor, adj_t, aoi=None,
-                     device: str = "cpu", batch_size: int = 128):
+                     device: str = "cpu", batch_size: int = 64):
     per_model = []
     for mdl in models:
         mdl.to(device).eval()

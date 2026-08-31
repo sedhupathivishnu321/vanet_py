@@ -166,13 +166,33 @@ def _try_pyg_temporal(root: Path, name: str):
                          False, feats, "pyg_temporal_npy")
 
 
+def _read_h5_speed(path: str):
+    """Return (speed [T, N] float32, sensor_id list).  Tries pandas first, then
+    a direct h5py read of the pandas 'fixed' layout (works across pandas versions
+    that broke ``read_hdf`` on old files)."""
+    try:
+        import pandas as pd
+        df = pd.read_hdf(path)
+        return df.to_numpy(dtype=np.float32), [str(c) for c in df.columns]
+    except Exception:
+        import h5py
+        with h5py.File(path, "r") as f:
+            grp = f[list(f.keys())[0]]                      # e.g. 'df' or 'speed'
+            vals = np.asarray(grp["block0_values"], dtype=np.float32)
+            try:
+                ids = [x.decode() if isinstance(x, bytes) else str(x)
+                       for x in np.asarray(grp["axis0"])]
+            except Exception:
+                ids = [str(i) for i in range(vals.shape[1])]
+        return vals, ids
+
+
 def _try_dcrnn_h5(root: Path, name: str):
     h5s = _prefer(_find(root, "*.h5"), name)
     if not h5s:
         return None
-    import pandas as pd
-    df = pd.read_hdf(h5s[0])
-    arr = df.to_numpy(dtype=np.float32)[:, :, None]
+    speed, cols = _read_h5_speed(h5s[0])
+    arr = speed[:, :, None]
     miss = np.isclose(arr[..., 0], 0.0)
     adj = None
     for pkl in _find(root, "*adj*.pkl"):
@@ -183,7 +203,7 @@ def _try_dcrnn_h5(root: Path, name: str):
             break
         except Exception:
             continue
-    coords = _try_coords(root, [str(c) for c in df.columns])
+    coords = _try_coords(root, [str(c) for c in cols])
     return SourceDataset(name, arr, adj, coords, _SAMPLING_INTERVAL_S.get(name, 300),
                          False, ["speed"], "dcrnn_h5", missing_mask=miss)
 
